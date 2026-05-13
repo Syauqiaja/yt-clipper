@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  yt-clipper:
+    build: .
+    container_name: yt-clipper
+    volumes:
+      - ./exports:/app/exports
+      - ./temp:/app/temp
+      - ./.env:/app/.env:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: ["--help"]
