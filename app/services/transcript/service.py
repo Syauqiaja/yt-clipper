@@ -121,9 +121,9 @@ class TranscriptService:
             return float(parts[0])
 
     def transcribe_with_whisper(
-        self, audio_path: str | Path, language: str | None = None
+        self, audio_path: str | Path, language: str | None = None, word_timestamps: bool = False
     ) -> Transcript:
-        """Transcribe audio using Faster-Whisper."""
+        """Transcribe audio using Faster-Whisper with optional word-level timestamps."""
         logger.info(f"Transcribing audio: {audio_path}")
 
         try:
@@ -140,6 +140,7 @@ class TranscriptService:
                 language=language,
                 beam_size=5,
                 vad_filter=True,
+                word_timestamps=word_timestamps,
                 vad_parameters=dict(
                     min_silence_duration_ms=500,
                 ),
@@ -172,6 +173,67 @@ class TranscriptService:
             )
         except Exception as e:
             raise TranscriptError(f"Failed to transcribe audio: {e}")
+    
+    def transcribe_with_word_timestamps(
+        self, audio_path: str | Path, language: str | None = None
+    ) -> list:
+        """
+        Transcribe audio with word-level timestamps.
+        
+        Args:
+            audio_path: Path to audio file
+            language: Optional language code
+            
+        Returns:
+            List of WordTimestamp objects
+        """
+        from app.services.captions.models import WordTimestamp
+        
+        logger.info(f"Transcribing with word timestamps: {audio_path}")
+        
+        try:
+            from faster_whisper import WhisperModel
+            
+            model = WhisperModel(
+                model_size_or_path=settings.whisper_model_size,
+                device=settings.whisper_device,
+                compute_type=settings.whisper_compute_type,
+            )
+            
+            segments_raw, info = model.transcribe(
+                str(audio_path),
+                language=language,
+                beam_size=5,
+                vad_filter=True,
+                word_timestamps=True,
+                vad_parameters=dict(
+                    min_silence_duration_ms=500,
+                ),
+            )
+            
+            words = []
+            for seg in segments_raw:
+                if hasattr(seg, "words") and seg.words:
+                    for word in seg.words:
+                        words.append(
+                            WordTimestamp(
+                                word=word.word.strip(),
+                                start=word.start,
+                                end=word.end,
+                                confidence=word.probability if hasattr(word, "probability") else None,
+                            )
+                        )
+            
+            logger.info(f"Extracted {len(words)} word timestamps")
+            
+            return words
+        
+        except ImportError:
+            raise TranscriptError(
+                "faster-whisper is not installed. Install with: pip install faster-whisper"
+            )
+        except Exception as e:
+            raise TranscriptError(f"Failed to transcribe with word timestamps: {e}")
 
     def normalize_transcript(self, transcript: Transcript) -> Transcript:
         """Clean and normalize transcript text."""

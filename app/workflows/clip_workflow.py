@@ -43,6 +43,11 @@ class ClipWorkflow:
         transcribe_only: bool = False,
         analyze_only: bool = False,
         max_clips: int | None = None,
+        output_format: str = "shorts",
+        template: str = "shorts_fit",
+        captions: bool = False,
+        caption_style: str = "tiktok",
+        karaoke: bool = False,
     ) -> ProcessingResult:
         """Run the complete clip generation workflow."""
         start_time = time.time()
@@ -116,7 +121,16 @@ class ClipWorkflow:
                     f"[cyan]Rendering {len(clips)} clips...", total=len(clips)
                 )
 
-                clip_paths = self._render_clips(clips, str(dl_result.video_path), transcript)
+                clip_paths = self._render_clips(
+                    clips, 
+                    str(dl_result.video_path), 
+                    transcript,
+                    output_format,
+                    template,
+                    captions,
+                    caption_style,
+                    karaoke,
+                )
                 progress.update(render_task, completed=len(clips))
 
                 # Stage 5: Export
@@ -166,8 +180,13 @@ class ClipWorkflow:
         clips: list[ClipCandidate],
         video_path: str,
         transcript: Transcript,
+        output_format: str = "shorts",
+        template: str = "shorts_fit",
+        captions: bool = False,
+        caption_style: str = "tiktok",
+        karaoke: bool = False,
     ) -> dict[int, tuple[Path, Optional[Path], Optional[Path]]]:
-        """Render all clips with subtitles and thumbnails."""
+        """Render all clips with Phase 2 rendering and optional captions."""
         clip_paths: dict[int, tuple[Path, Optional[Path], Optional[Path]]] = {}
         temp_dir = Path(settings.temp_dir)
 
@@ -184,21 +203,59 @@ class ClipWorkflow:
                     clip.end_time,
                 )
 
-                # Convert to vertical
-                vertical_clip = temp_dir / f"vertical_{clip.rank}.mp4"
-                self.reframing.convert_to_vertical(
-                    raw_clip, vertical_clip, settings.output_resolution
-                )
-
-                # Generate subtitles
-                sub_path = None
-                if transcript.segments:
-                    sub_path = self.subtitles.generate_subtitle_file(
-                        transcript.segments,
-                        clip,
-                        temp_dir / f"sub_{clip.rank}.srt",
-                        "srt",
+                # Phase 2: Use new rendering system if available
+                try:
+                    from app.services.formats import FormatRegistry
+                    from app.services.renderer import RenderService
+                    
+                    # Get video info
+                    video_info = self.ffmpeg.get_video_info(raw_clip)
+                    video_width = video_info["streams"][0]["width"]
+                    video_height = video_info["streams"][0]["height"]
+                    
+                    # Generate captions if requested
+                    sub_path = None
+                    if captions:
+                        sub_path = self._generate_captions(
+                            raw_clip,
+                            clip,
+                            transcript,
+                            output_format,
+                            caption_style,
+                            karaoke,
+                            temp_dir,
+                        )
+                    
+                    # Render with Phase 2 system
+                    vertical_clip = temp_dir / f"vertical_{clip.rank}.mp4"
+                    renderer = RenderService()
+                    renderer.render_with_template(
+                        input_path=raw_clip,
+                        output_path=vertical_clip,
+                        template_name=template,
+                        format_name=output_format,
+                        video_width=video_width,
+                        video_height=video_height,
+                        subtitle_path=sub_path,
                     )
+                    
+                except ImportError:
+                    # Fallback to Phase 1 rendering
+                    logger.warning("Phase 2 rendering not available, using legacy rendering")
+                    vertical_clip = temp_dir / f"vertical_{clip.rank}.mp4"
+                    self.reframing.convert_to_vertical(
+                        raw_clip, vertical_clip, settings.output_resolution
+                    )
+                    
+                    # Generate subtitles (Phase 1)
+                    sub_path = None
+                    if transcript.segments:
+                        sub_path = self.subtitles.generate_subtitle_file(
+                            transcript.segments,
+                            clip,
+                            temp_dir / f"sub_{clip.rank}.srt",
+                            "srt",
+                        )
 
                 # Generate thumbnail
                 thumb_path = self.ffmpeg.generate_thumbnail(
@@ -215,6 +272,53 @@ class ClipWorkflow:
                 continue
 
         return clip_paths
+    
+    def _generate_captions(
+        self,
+        audio_path: Path,
+        clip: ClipCandidate,
+        transcript: Transcript,
+        output_format: str,
+        caption_style: str,
+        karaoke: bool,
+        temp_dir: Path,
+    ) -> Optional[Path]:
+        """Generate captions for clip using Phase 2 caption system."""
+        try:
+            from app.services.captions import CaptionService, CaptionPresets
+            from app.services.formats import FormatRegistry
+            
+            # Get word timestamps for clip timeframe
+            words = self.transcript.transcribe_with_word_timestamps(audio_path)
+            
+            if not words:
+                logger.warning("No word timestamps available for captions")
+                return None
+            
+            # Get format for caption positioning
+            fmt = FormatRegistry.get(output_format)
+            
+            # Get caption style
+            style = CaptionPresets.get_preset(caption_style)
+            
+            # Generate captions
+            caption_service = CaptionService(style=style)
+            ass_path = temp_dir / f"captions_{clip.rank}.ass"
+            
+            caption_service.generate_captions(
+                words=words,
+                output_path=ass_path,
+                video_width=fmt.width,
+                video_height=fmt.height,
+                karaoke=karaoke,
+            )
+            
+            logger.info(f"Generated captions for clip {clip.rank}")
+            return ass_path
+            
+        except Exception as e:
+            logger.error(f"Failed to generate captions: {e}")
+            return None
 
     def _sanitize_project_name(self, title: str) -> str:
         """Sanitize video title for use as project name."""
