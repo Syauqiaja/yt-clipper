@@ -48,6 +48,7 @@ class ClipWorkflow:
         captions: bool = False,
         caption_style: str = "tiktok",
         karaoke: bool = False,
+        verbose: bool = False,
     ) -> ProcessingResult:
         """Run the complete clip generation workflow."""
         start_time = time.time()
@@ -104,6 +105,12 @@ class ClipWorkflow:
                 if max_clips:
                     clips = self.scoring.select_top_clips(clips, max_clips)
                 progress.update(ai_task, completed=100)
+                
+                # Generate metadata for clips
+                if not analyze_only:
+                    meta_task = progress.add_task("[cyan]Generating titles & descriptions...", total=100)
+                    clips = self.ai.generate_clip_metadata(clips, str(dl_result.video_path))
+                    progress.update(meta_task, completed=100)
 
                 if analyze_only:
                     return ProcessingResult(
@@ -138,7 +145,7 @@ class ClipWorkflow:
                 exp_task = progress.add_task("[cyan]Exporting clips...", total=100)
 
                 proj_name = project_name or self._sanitize_project_name(dl_result.metadata.title)
-                exports = self.export.export_all_clips(clips, clip_paths, proj_name)
+                exports = self.export.export_all_clips(clips, clip_paths, proj_name, verbose)
                 progress.update(exp_task, completed=100)
 
                 stage = ProcessingStage.COMPLETE

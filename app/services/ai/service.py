@@ -9,6 +9,7 @@ from app.schemas.models import ClipCandidate, Transcript, VideoMetadata
 
 from .client import AIClient, AIError
 from .prompts import CLIP_ANALYSIS_SYSTEM_PROMPT, build_analysis_prompt
+from .metadata_prompts import METADATA_GENERATION_SYSTEM_PROMPT, build_metadata_prompt
 
 logger = get_logger("ai.service")
 
@@ -98,3 +99,112 @@ class AIAnalysisService:
             raise
         except Exception as e:
             raise AIAnalysisError(f"Analysis failed: {e}")
+
+    def generate_clip_metadata(
+        self,
+        clips: list[ClipCandidate],
+        video_path: str,
+    ) -> list[ClipCandidate]:
+        """Generate titles and descriptions for clips by transcribing each clip individually."""
+        from app.services.transcript.service import TranscriptService
+        from pathlib import Path
+        
+        logger.info(f"Generating metadata for {len(clips)} clips")
+        transcript_service = TranscriptService()
+        
+        for clip in clips:
+            try:
+                logger.info(f"Processing clip {clip.rank}: {clip.start_time}s - {clip.end_time}s")
+                
+                # Extract clip audio and transcribe it
+                clip_audio = Path(video_path).parent / f"clip_{clip.rank}_audio.wav"
+                
+                # Use ffmpeg to extract clip audio
+                import subprocess
+                from app.config.settings import settings
+                
+                cmd = [
+                    settings.ffmpeg_path,
+                    "-i", video_path,
+                    "-ss", str(clip.start_time),
+                    "-t", str(clip.duration),
+                    "-vn",
+                    "-acodec", "pcm_s16le",
+                    "-ar", "16000",
+                    "-ac", "1",
+                    "-y",
+                    str(clip_audio),
+                ]
+                
+                logger.debug(f"Extracting clip audio: {' '.join(cmd)}")
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                
+                if result.returncode != 0:
+                    logger.warning(f"Failed to extract audio for clip {clip.rank}: {result.stderr}")
+                    clip.title_id = clip.title
+                    clip.title_en = clip.title
+                    clip.description_id = clip.summary
+                    clip.description_en = clip.summary
+                    continue
+                
+                # Transcribe the clip audio
+                try:
+                    clip_transcript_obj = transcript_service.transcribe_with_whisper(clip_audio)
+                    clip_transcript = clip_transcript_obj.full_text
+                    
+                    # Clean up audio file
+                    clip_audio.unlink(missing_ok=True)
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to transcribe clip {clip.rank}: {e}")
+                    clip_audio.unlink(missing_ok=True)
+                    clip.title_id = clip.title
+                    clip.title_en = clip.title
+                    clip.description_id = clip.summary
+                    clip.description_en = clip.summary
+                    continue
+                
+                if not clip_transcript:
+                    logger.warning(f"No transcript for clip {clip.rank}, using fallback")
+                    clip.title_id = clip.title
+                    clip.title_en = clip.title
+                    clip.description_id = clip.summary
+                    clip.description_en = clip.summary
+                    continue
+                
+                logger.info(f"Clip {clip.rank} transcript length: {len(clip_transcript)} chars")
+                logger.debug(f"Clip {clip.rank} transcript: {clip_transcript[:200]}...")
+                
+                prompt = build_metadata_prompt(
+                    original_title=clip.title,
+                    hook=clip.hook,
+                    summary=clip.summary,
+                    duration=clip.duration,
+                    transcript=clip_transcript,
+                )
+                
+                raw_response = self.client.chat_completion(
+                    system_prompt=METADATA_GENERATION_SYSTEM_PROMPT,
+                    user_prompt=prompt,
+                    temperature=0.7,
+                    max_tokens=1024,
+                )
+                
+                parsed = self.client.parse_json_response(raw_response)
+                
+                clip.title_id = parsed.get("title_id", clip.title)
+                clip.title_en = parsed.get("title_en", clip.title)
+                clip.description_id = parsed.get("description_id", clip.summary)
+                clip.description_en = parsed.get("description_en", clip.summary)
+                
+                logger.info(f"Generated metadata for clip {clip.rank}: {clip.title_en}")
+                
+            except Exception as e:
+                logger.warning(f"Failed to generate metadata for clip {clip.rank}: {e}")
+                clip.title_id = clip.title
+                clip.title_en = clip.title
+                clip.description_id = clip.summary
+                clip.description_en = clip.summary
+                continue
+        
+        return clips

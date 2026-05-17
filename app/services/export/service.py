@@ -46,6 +46,7 @@ class ExportService:
         subtitle_path: Optional[str | Path],
         thumbnail_path: Optional[str | Path],
         transcript: Optional[Transcript] = None,
+        verbose: bool = False,
     ) -> ClipExport:
         """Export a single clip with all artifacts."""
         project_name = f"clip_{clip.rank:02d}_{self._sanitize_name(clip.title)[:40]}"
@@ -70,7 +71,7 @@ class ExportService:
 
         # Save metadata
         metadata_path = dirs["metadata"] / f"{project_name}.json"
-        self._save_clip_metadata(metadata_path, clip, final_video, final_sub, final_thumb)
+        self._save_clip_metadata(metadata_path, clip, final_video, final_sub, final_thumb, verbose)
 
         return ClipExport(
             clip=clip,
@@ -88,25 +89,14 @@ class ExportService:
         video_path: Path,
         subtitle_path: Optional[Path],
         thumbnail_path: Optional[Path],
+        verbose: bool = False,
     ) -> None:
         """Save clip metadata as JSON."""
         metadata = {
-            "title": clip.title,
-            "hook": clip.hook,
-            "summary": clip.summary,
-            "start_time": clip.start_time,
-            "end_time": clip.end_time,
-            "duration": clip.duration,
-            "rank": clip.rank,
-            "final_score": clip.final_score,
-            "scores": {
-                "hook_strength": clip.scores.hook_strength,
-                "information_density": clip.scores.information_density,
-                "emotional_engagement": clip.scores.emotional_engagement,
-                "storytelling": clip.scores.storytelling,
-                "retention_potential": clip.scores.retention_potential,
-                "viral_potential": clip.scores.viral_potential,
-            },
+            "title_id": clip.title_id or clip.title,
+            "title_en": clip.title_en or clip.title,
+            "description_id": clip.description_id or clip.summary,
+            "description_en": clip.description_en or clip.summary,
             "files": {
                 "video": str(video_path),
                 "subtitles": str(subtitle_path) if subtitle_path else None,
@@ -114,6 +104,26 @@ class ExportService:
             },
             "exported_at": datetime.now().isoformat(),
         }
+        
+        if verbose:
+            metadata.update({
+                "title": clip.title,
+                "hook": clip.hook,
+                "summary": clip.summary,
+                "start_time": clip.start_time,
+                "end_time": clip.end_time,
+                "duration": clip.duration,
+                "rank": clip.rank,
+                "final_score": clip.final_score,
+                "scores": {
+                    "hook_strength": clip.scores.hook_strength,
+                    "information_density": clip.scores.information_density,
+                    "emotional_engagement": clip.scores.emotional_engagement,
+                    "storytelling": clip.scores.storytelling,
+                    "retention_potential": clip.scores.retention_potential,
+                    "viral_potential": clip.scores.viral_potential,
+                },
+            })
 
         with open(path, "w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=2, ensure_ascii=False)
@@ -123,6 +133,7 @@ class ExportService:
         clips: list[ClipCandidate],
         clip_paths: dict[int, tuple[Path, Optional[Path], Optional[Path]]],
         project_name: str,
+        verbose: bool = False,
     ) -> list[ClipExport]:
         """Export all clips for a project."""
         dirs = self._create_project_dir(project_name)
@@ -140,6 +151,7 @@ class ExportService:
                 video_path=video_path,
                 subtitle_path=sub_path,
                 thumbnail_path=thumb_path,
+                verbose=verbose,
             )
             exports.append(export)
 

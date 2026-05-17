@@ -148,12 +148,16 @@ class TranscriptService:
 
             segments = []
             for seg in segments_raw:
+                confidence = None
+                if hasattr(seg, "avg_logprob") and seg.avg_logprob is not None:
+                    confidence = max(0.0, seg.avg_logprob)
+                
                 segments.append(
                     TranscriptSegment(
                         start=seg.start,
                         end=seg.end,
                         text=seg.text.strip(),
-                        confidence=seg.avg_logprob if hasattr(seg, "avg_logprob") else None,
+                        confidence=confidence,
                     )
                 )
 

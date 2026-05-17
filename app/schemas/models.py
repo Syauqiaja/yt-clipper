@@ -25,6 +25,10 @@ class ClipCandidate(BaseModel):
     scores: ClipScores
     final_score: float = Field(default=0.0, ge=0, le=10, description="Weighted final score")
     rank: int = Field(default=0, ge=0, description="Rank among all clips")
+    title_id: str | None = Field(default=None, description="Indonesian title")
+    title_en: str | None = Field(default=None, description="English title")
+    description_id: str | None = Field(default=None, description="Indonesian description")
+    description_en: str | None = Field(default=None, description="English description")
 
     def calculate_final_score(self) -> float:
         from app.config.settings import settings

@@ -86,9 +86,10 @@ def clip_run(
             captions=captions,
             caption_style=caption_style,
             karaoke=karaoke,
+            verbose=verbose,
         )
 
-        _display_results(result)
+        _display_results(result, verbose)
 
     except ClipperError as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
@@ -310,21 +311,26 @@ def config_validate() -> None:
     console.print()
 
 
-def _display_results(result) -> None:
+def _display_results(result, verbose: bool = False) -> None:
     """Display processing results."""
     console.print(f"\n[bold green]✓ Processing Complete[/bold green]\n")
     console.print(f"Video: {result.video_metadata.title}")
     console.print(f"Clips Generated: {len(result.clips)}")
     console.print(f"Processing Time: {result.processing_time:.1f}s\n")
 
-    _display_clip_analysis(result.clips)
+    if verbose:
+        _display_clip_analysis(result.clips)
 
     if result.exports:
         console.print("\n[bold cyan]Exported Clips:[/bold cyan]\n")
         for export in result.exports:
-            console.print(f"  • {export.clip.title}")
-            console.print(f"    Path: {export.video_path}")
-            console.print(f"    Score: {export.clip.final_score:.2f}\n")
+            if verbose:
+                console.print(f"  • {export.clip.title}")
+                console.print(f"    Path: {export.video_path}")
+                console.print(f"    Score: {export.clip.final_score:.2f}\n")
+            else:
+                console.print(f"  • {export.clip.title_en or export.clip.title}")
+                console.print(f"    Path: {export.video_path}\n")
 
 
 def _display_clip_analysis(clips) -> None:
