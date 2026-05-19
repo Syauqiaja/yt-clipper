@@ -1,6 +1,7 @@
 """Main entry point for yt-clipper CLI."""
 
 import sys
+from pathlib import Path
 from typing import Optional
 
 import typer
@@ -43,6 +44,12 @@ def main() -> None:
         logger.error(f"Fatal error: {e}")
         console.print(f"[bold red]Error:[/bold red] {e}")
         sys.exit(1)
+    finally:
+        temp_dir = Path(settings.temp_dir)
+        if temp_dir.exists():
+            for file in temp_dir.iterdir():
+                if file.name != '.gitkeep' and file.is_file():
+                    file.unlink()
 
 
 if __name__ == "__main__":
