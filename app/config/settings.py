@@ -80,6 +80,12 @@ class Settings(BaseSettings):
         default="temp", description="Temporary files directory"
     )
 
+    # YouTube
+    youtube_cookies_file: str = Field(
+        default="",
+        description="Path to YouTube cookies file for authentication"
+    )
+
     # Google Drive
     google_oauth_credentials_path: str = Field(
         default="google_oauth_credentials.json",

@@ -19,7 +19,7 @@ class YouTubeService:
     def __init__(self, output_dir: str | Path | None = None):
         self.output_dir = Path(output_dir or settings.temp_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self._cookies_file = None
+        self._cookies_file = settings.youtube_cookies_file
 
     def _get_ydl_opts(self, format_type: str = "best") -> dict[str, Any]:
         """Get base yt-dlp options."""
@@ -36,6 +36,11 @@ class YouTubeService:
             "skip_download": False,
             "no_color": True,
         }
+
+        # Add cookies file if configured
+        if self._cookies_file and Path(self._cookies_file).exists():
+            opts["cookiefile"] = self._cookies_file
+            logger.info(f"Using cookies file: {self._cookies_file}")
 
         if settings.debug:
             opts["verbose"] = True
