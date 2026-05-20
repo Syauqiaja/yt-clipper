@@ -21,7 +21,7 @@ class YouTubeService:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self._cookies_file = settings.youtube_cookies_file
 
-    def _get_ydl_opts(self, format_type: str = "best") -> dict[str, Any]:
+    def _get_ydl_opts(self, format_type: str = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best") -> dict[str, Any]:
         """Get base yt-dlp options."""
         opts: dict[str, Any] = {
             "quiet": True,
@@ -35,6 +35,7 @@ class YouTubeService:
             "subtitleslangs": ["en"],
             "skip_download": False,
             "no_color": True,
+            "merge_output_format": "mp4",
         }
 
         # Add cookies file if configured
