@@ -80,6 +80,30 @@ class Settings(BaseSettings):
         default="temp", description="Temporary files directory"
     )
 
+    # Google Drive
+    google_oauth_credentials_path: str = Field(
+        default="google_oauth_credentials.json",
+        description="Path to Google OAuth credentials JSON"
+    )
+    google_drive_folder_id: str = Field(
+        default="",
+        description="Google Drive folder ID for uploads"
+    )
+    google_drive_token_path: str = Field(
+        default="google_drive_token.json",
+        description="Path to store Google Drive token"
+    )
+
+    # Webhooks
+    webhook_enabled: bool = Field(
+        default=False,
+        description="Enable webhook notifications"
+    )
+    webhook_url: str = Field(
+        default="",
+        description="Webhook URL to send notifications"
+    )
+
     # Observability
     debug: bool = Field(default=False, description="Debug mode")
     log_level: str = Field(

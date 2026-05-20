@@ -1,5 +1,6 @@
 """Main workflow: orchestrates the entire clip generation pipeline."""
 
+import asyncio
 import time
 from pathlib import Path
 from typing import Optional
@@ -19,6 +20,7 @@ from app.services.reframing.service import ReframingService
 from app.services.scoring.service import ScoringService
 from app.services.subtitles.service import SubtitleService
 from app.services.transcript.service import TranscriptService
+from app.services.webhooks import WebhookService
 from app.services.youtube.service import YouTubeService
 
 console = Console()
@@ -34,6 +36,7 @@ class ClipWorkflow:
         self.subtitles = SubtitleService()
         self.reframing = ReframingService(self.ffmpeg)
         self.export = ExportService()
+        self.webhook = WebhookService()
 
     def run(
         self,
@@ -49,6 +52,8 @@ class ClipWorkflow:
         caption_style: str = "tiktok",
         karaoke: bool = False,
         verbose: bool = False,
+        upload_to_drive: bool = False,
+        send_webhook: bool = True,
     ) -> ProcessingResult:
         """Run the complete clip generation workflow."""
         start_time = time.time()
@@ -148,22 +153,84 @@ class ClipWorkflow:
                 exports = self.export.export_all_clips(clips, clip_paths, proj_name, verbose)
                 progress.update(exp_task, completed=100)
 
-                stage = ProcessingStage.COMPLETE
+                # Stage 6: Upload to Google Drive (optional)
+                drive_uploads = []
+                if upload_to_drive:
+                    from app.services.storage import GoogleDriveService
+                    
+                    drive_task = progress.add_task("[cyan]Uploading to Google Drive...", total=len(exports))
+                    drive_service = GoogleDriveService()
+                    
+                    for export in exports:
+                        upload_result = drive_service.upload_file(export.video_path)
+                        drive_uploads.append({
+                            "clip_rank": export.clip.rank,
+                            "clip_title": export.clip.title,
+                            "file_id": upload_result.file_id,
+                            "file_name": upload_result.file_name,
+                            "view_link": upload_result.view_link,
+                            "download_link": upload_result.download_link,
+                            "thumbnail_link": upload_result.thumbnail_link,
+                        })
+                        progress.update(drive_task, advance=1)
 
-                return ProcessingResult(
+                stage = ProcessingStage.COMPLETE
+                
+                result = ProcessingResult(
                     video_url=url,
                     video_metadata=dl_result.metadata,
                     transcript=transcript,
                     clips=clips,
                     exports=exports,
                     processing_time=time.time() - start_time,
+                    drive_uploads=drive_uploads if drive_uploads else None,
                 )
+
+                # Send webhook notification
+                if send_webhook:
+                    # Merge drive upload info into clips
+                    clips_with_uploads = []
+                    for clip in clips:
+                        clip_data = clip.model_dump()
+                        # Find matching drive upload by rank
+                        if drive_uploads:
+                            matching_upload = next(
+                                (u for u in drive_uploads if u["clip_rank"] == clip.rank),
+                                None
+                            )
+                            if matching_upload:
+                                clip_data["drive_file_id"] = matching_upload["file_id"]
+                                clip_data["drive_file_name"] = matching_upload["file_name"]
+                                clip_data["drive_view_link"] = matching_upload["view_link"]
+                                clip_data["drive_download_link"] = matching_upload["download_link"]
+                                clip_data["drive_thumbnail_link"] = matching_upload["thumbnail_link"]
+                        clips_with_uploads.append(clip_data)
+                    
+                    asyncio.run(self.webhook.send_completion_webhook(
+                        video_url=url,
+                        video_metadata=dl_result.metadata.model_dump(),
+                        clips=clips_with_uploads,
+                        drive_uploads=None,
+                        processing_time=result.processing_time,
+                    ))
+
+                return result
 
         except ClipperError as e:
             logger.error(f"Workflow failed at {stage}: {e}")
+            if send_webhook:
+                asyncio.run(self.webhook.send_error_webhook(
+                    video_url=url,
+                    error=str(e),
+                ))
             raise
         except Exception as e:
             logger.error(f"Unexpected error at {stage}: {e}")
+            if send_webhook:
+                asyncio.run(self.webhook.send_error_webhook(
+                    video_url=url,
+                    error=str(e),
+                ))
             raise ClipperError(f"Workflow failed: {e}")
 
     def _get_transcript(self, dl_result) -> Transcript:

@@ -65,6 +65,9 @@ def clip_run(
     captions: bool = typer.Option(False, "--captions", "-c", help="Generate auto captions"),
     caption_style: str = typer.Option("tiktok", "--caption-style", help="Caption style preset"),
     karaoke: bool = typer.Option(False, "--karaoke", help="Enable karaoke-style captions"),
+    upload_to_drive: bool = typer.Option(False, "--upload-to-drive", help="Upload to Google Drive"),
+    webhook: bool = typer.Option(True, "--webhook/--no-webhook", help="Send webhook notification"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
 ) -> None:
     """Generate clips from a YouTube video with Phase 2 rendering."""
@@ -72,8 +75,9 @@ def clip_run(
         import logging
         logging.getLogger("yt-clipper").setLevel(logging.DEBUG)
 
-    console.print(f"\n[bold cyan]YT-Clipper[/bold cyan] Processing: {url}\n")
-    console.print(f"Format: {format} | Template: {template} | Captions: {captions}\n")
+    if not json_output:
+        console.print(f"\n[bold cyan]YT-Clipper[/bold cyan] Processing: {url}\n")
+        console.print(f"Format: {format} | Template: {template} | Captions: {captions}\n")
 
     try:
         workflow = ClipWorkflow()
@@ -87,12 +91,64 @@ def clip_run(
             caption_style=caption_style,
             karaoke=karaoke,
             verbose=verbose,
+            upload_to_drive=upload_to_drive,
+            send_webhook=webhook,
         )
 
-        _display_results(result, verbose)
+        if json_output:
+            # Build clips with drive upload info
+            clips_output = []
+            for clip, export in zip(result.clips, result.exports):
+                clip_data = {
+                    "rank": clip.rank,
+                    "title": clip.title,
+                    "start_time": clip.start_time,
+                    "end_time": clip.end_time,
+                    "duration": clip.duration,
+                    "final_score": clip.final_score,
+                    "scores": clip.scores.model_dump(),
+                    "title_id": clip.title_id,
+                    "title_en": clip.title_en,
+                    "description_id": clip.description_id,
+                    "description_en": clip.description_en,
+                    "local_path": export.video_path,
+                    "metadata_path": export.metadata_path,
+                }
+                
+                # Add drive upload info if available
+                if result.drive_uploads:
+                    matching_upload = next(
+                        (u for u in result.drive_uploads if u["clip_rank"] == clip.rank),
+                        None
+                    )
+                    if matching_upload:
+                        clip_data["drive_file_id"] = matching_upload["file_id"]
+                        clip_data["drive_file_name"] = matching_upload["file_name"]
+                        clip_data["drive_view_link"] = matching_upload["view_link"]
+                        clip_data["drive_download_link"] = matching_upload["download_link"]
+                        clip_data["drive_thumbnail_link"] = matching_upload["thumbnail_link"]
+                
+                clips_output.append(clip_data)
+            
+            output = {
+                "success": True,
+                "video_url": result.video_url,
+                "video_title": result.video_metadata.title,
+                "video_metadata": result.video_metadata.model_dump(),
+                "clips_generated": len(result.clips),
+                "processing_time": result.processing_time,
+                "clips": clips_output,
+                "drive_uploads": result.drive_uploads,
+            }
+            print(json.dumps(output, indent=2))
+        else:
+            _display_results(result, verbose)
 
     except ClipperError as e:
-        console.print(f"[bold red]Error:[/bold red] {e}")
+        if json_output:
+            print(json.dumps({"success": False, "error": str(e)}, indent=2))
+        else:
+            console.print(f"[bold red]Error:[/bold red] {e}")
         raise typer.Exit(1)
 
 

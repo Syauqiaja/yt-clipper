@@ -44,3 +44,6 @@ models/
 htmlcov/
 .coverage
 .coverage.*
+
+*credentials.json
+google_drive_token.json

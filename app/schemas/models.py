@@ -113,6 +113,7 @@ class ProcessingResult(BaseModel):
     exports: list[ClipExport]
     processing_time: float
     created_at: datetime = Field(default_factory=datetime.now)
+    drive_uploads: list[dict] | None = Field(default=None, description="Google Drive upload results")
 
 
 class AIAnalysisRequest(BaseModel):
