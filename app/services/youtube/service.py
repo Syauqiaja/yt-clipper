@@ -21,32 +21,21 @@ class YouTubeService:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self._cookies_file = settings.youtube_cookies_file
 
-    def _get_ydl_opts(self, format_type: str | None = None) -> dict[str, Any]:
+    def _get_ydl_opts(self, format_type: str = "best") -> dict[str, Any]:
         """Get base yt-dlp options."""
         opts: dict[str, Any] = {
             "quiet": True,
             "no_warnings": True,
             "extract_flat": False,
             "outtmpl": str(self.output_dir / "%(id)s.%(ext)s"),
+            "format": format_type,
             "writeinfojson": True,
             "writesubtitles": True,
             "writeautomaticsub": True,
             "subtitleslangs": ["en"],
             "skip_download": False,
             "no_color": True,
-            # Anti-bot detection bypass
-            "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "referer": "https://www.youtube.com/",
-            "http_headers": {
-                "Accept-Language": "en-US,en;q=0.9",
-                "Accept-Encoding": "gzip, deflate, br",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            },
         }
-
-        # Only set format if explicitly provided, otherwise let yt-dlp choose
-        if format_type:
-            opts["format"] = format_type
 
         # Add cookies file if configured
         if self._cookies_file and Path(self._cookies_file).exists():
