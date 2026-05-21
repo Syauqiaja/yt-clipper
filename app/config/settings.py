@@ -85,6 +85,10 @@ class Settings(BaseSettings):
         default="",
         description="Path to YouTube cookies file for authentication"
     )
+    youtube_cookies_from_browser: str = Field(
+        default="",
+        description="Browser to extract cookies from (chrome, firefox, edge, etc.)"
+    )
 
     # Google Drive
     google_oauth_credentials_path: str = Field(

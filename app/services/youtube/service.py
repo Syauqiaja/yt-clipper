@@ -20,6 +20,7 @@ class YouTubeService:
         self.output_dir = Path(output_dir or settings.temp_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self._cookies_file = settings.youtube_cookies_file
+        self._cookies_from_browser = settings.youtube_cookies_from_browser
 
     def _get_ydl_opts(self, format_type: str = "best") -> dict[str, Any]:
         """Get base yt-dlp options."""
@@ -28,7 +29,7 @@ class YouTubeService:
             "no_warnings": True,
             "extract_flat": False,
             "outtmpl": str(self.output_dir / "%(id)s.%(ext)s"),
-            "format": format_type,
+            "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
             "writeinfojson": True,
             "writesubtitles": True,
             "writeautomaticsub": True,
@@ -37,8 +38,12 @@ class YouTubeService:
             "no_color": True,
         }
 
-        # Add cookies file if configured
-        if self._cookies_file and Path(self._cookies_file).exists():
+        # Add cookies from browser if configured
+        if self._cookies_from_browser:
+            opts["cookiesfrombrowser"] = (self._cookies_from_browser,)
+            logger.info(f"Using cookies from browser: {self._cookies_from_browser}")
+        # Otherwise use cookies file if configured
+        elif self._cookies_file and Path(self._cookies_file).exists():
             opts["cookiefile"] = self._cookies_file
             logger.info(f"Using cookies file: {self._cookies_file}")
 
