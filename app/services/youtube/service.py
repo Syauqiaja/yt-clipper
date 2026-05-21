@@ -74,8 +74,8 @@ class YouTubeService:
                     like_count=info.get("like_count"),
                     channel=info.get("channel"),
                     thumbnail_url=info.get("thumbnail"),
-                    categories=info.get("categories", []),
-                    tags=info.get("tags", []),
+                    categories=info.get("categories") or [],
+                    tags=info.get("tags") or [],
                 )
 
         except Exception as e:
@@ -108,8 +108,8 @@ class YouTubeService:
                     like_count=info.get("like_count"),
                     channel=info.get("channel"),
                     thumbnail_url=info.get("thumbnail"),
-                    categories=info.get("categories", []),
-                    tags=info.get("tags", []),
+                    categories=info.get("categories") or [],
+                    tags=info.get("tags") or [],
                 )
 
         except Exception as e:

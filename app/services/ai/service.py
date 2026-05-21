@@ -1,6 +1,6 @@
 """AI analysis service: orchestrate semantic clip analysis."""
 
-from typing import Any
+from typing import Any, Optional
 
 from app.config.settings import settings
 from app.core.exceptions import AIAnalysisError
@@ -104,6 +104,8 @@ class AIAnalysisService:
         self,
         clips: list[ClipCandidate],
         video_path: str,
+        program_name: Optional[str] = None,
+        people_mentioned: Optional[str] = None,
     ) -> list[ClipCandidate]:
         """Generate titles and descriptions for clips by transcribing each clip individually."""
         from app.services.transcript.service import TranscriptService
@@ -146,7 +148,6 @@ class AIAnalysisService:
                     clip.description_id = clip.summary
                     clip.description_en = clip.summary
                     continue
-                
                 # Transcribe the clip audio
                 try:
                     clip_transcript_obj = transcript_service.transcribe_with_whisper(clip_audio)
@@ -196,6 +197,19 @@ class AIAnalysisService:
                 clip.title_en = parsed.get("title_en", clip.title)
                 clip.description_id = parsed.get("description_id", clip.summary)
                 clip.description_en = parsed.get("description_en", clip.summary)
+                
+                # Concatenate program name and people to the end of titles
+                if program_name or people_mentioned:
+                    suffix_parts = []
+                    if program_name:
+                        suffix_parts.append(program_name)
+                    if people_mentioned:
+                        suffix_parts.append(people_mentioned)
+                    
+                    if suffix_parts:
+                        suffix = " - ".join(suffix_parts)
+                        clip.title_id = f"{clip.title_id} - {suffix}"
+                        clip.title_en = f"{clip.title_en} - {suffix}"
                 
                 logger.info(f"Generated metadata for clip {clip.rank}: {clip.title_en}")
                 

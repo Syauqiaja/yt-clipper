@@ -74,10 +74,29 @@ def clip_run(
     if verbose:
         import logging
         logging.getLogger("yt-clipper").setLevel(logging.DEBUG)
-
+    
+    program_name = None
+    people_mentioned = None
     if not json_output:
+        program_name = typer.prompt("What program is this video from? (press Enter to skip)", default="", show_default=False)
+        people_mentioned = typer.prompt("Who should be mentioned in the title? (comma-separated, press Enter to skip)", default="", show_default=False)
+        
+        if not program_name:
+            program_name = None
+        if not people_mentioned:
+            people_mentioned = None
+        
         console.print(f"\n[bold cyan]YT-Clipper[/bold cyan] Processing: {url}\n")
         console.print(f"Format: {format} | Template: {template} | Captions: {captions}\n")
+    else:
+        import sys
+        sys.stderr.write("What program is this video from? (press Enter to skip): ")
+        sys.stderr.flush()
+        program_name = input().strip() or None
+        
+        sys.stderr.write("Who should be mentioned in the title? (comma-separated, press Enter to skip): ")
+        sys.stderr.flush()
+        people_mentioned = input().strip() or None
 
     try:
         workflow = ClipWorkflow()
@@ -93,6 +112,8 @@ def clip_run(
             verbose=verbose,
             upload_to_drive=upload_to_drive,
             send_webhook=webhook,
+            program_name=program_name,
+            people_mentioned=people_mentioned,
         )
 
         if json_output:

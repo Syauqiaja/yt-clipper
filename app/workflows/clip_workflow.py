@@ -54,6 +54,8 @@ class ClipWorkflow:
         verbose: bool = False,
         upload_to_drive: bool = False,
         send_webhook: bool = True,
+        program_name: Optional[str] = None,
+        people_mentioned: Optional[str] = None,
     ) -> ProcessingResult:
         """Run the complete clip generation workflow."""
         start_time = time.time()
@@ -114,7 +116,12 @@ class ClipWorkflow:
                 # Generate metadata for clips
                 if not analyze_only:
                     meta_task = progress.add_task("[cyan]Generating titles & descriptions...", total=100)
-                    clips = self.ai.generate_clip_metadata(clips, str(dl_result.video_path))
+                    clips = self.ai.generate_clip_metadata(
+                        clips, 
+                        str(dl_result.video_path),
+                        program_name=program_name,
+                        people_mentioned=people_mentioned,
+                    )
                     progress.update(meta_task, completed=100)
 
                 if analyze_only:
